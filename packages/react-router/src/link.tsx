@@ -595,12 +595,7 @@ export function useLinkProps<
     activeProps = () => ({ className: 'active' }),
     inactiveProps = () => ({}),
     activeOptions,
-    hash,
-    search,
-    params,
     to,
-    state,
-    mask,
     preload: userPreload,
     preloadDelay: userPreloadDelay,
     replace,
@@ -622,6 +617,16 @@ export function useLinkProps<
     ...rest
   } = options
 
+  const {
+    // prevent these from being returned
+    params: _params,
+    search: _search,
+    hash: _hash,
+    state: _state,
+    mask: _mask,
+    ...propsSafeToSpread
+  } = rest
+
   // If this link simply reloads the current route,
   // make sure it has a new key so it will trigger a data refresh
 
@@ -636,9 +641,12 @@ export function useLinkProps<
     return 'internal'
   }, [to])
 
+  // subscribe to search params to re-build location if it changes
+  const currentSearch = useRouterState({ select: (s) => s.location.search })
+
   const next = React.useMemo(
     () => router.buildLocation(options as any),
-    [router, options],
+    [router, options, currentSearch],
   )
   const preload = React.useMemo(
     () => userPreload ?? router.options.defaultPreload,
@@ -719,7 +727,7 @@ export function useLinkProps<
 
   if (type === 'external') {
     return {
-      ...rest,
+      ...propsSafeToSpread,
       ref: innerRef as React.ComponentPropsWithRef<'a'>['ref'],
       type,
       href: to,
@@ -839,7 +847,7 @@ export function useLinkProps<
   }
 
   return {
-    ...rest,
+    ...propsSafeToSpread,
     ...resolvedActiveProps,
     ...resolvedInactiveProps,
     href: disabled
@@ -982,7 +990,7 @@ export function createLink<const TComp>(
 export const Link: LinkComponent<'a'> = React.forwardRef<Element, any>(
   (props, ref) => {
     const { _asChild, ...rest } = props
-    const { type, ref: innerRef, ...linkProps } = useLinkProps(rest, ref)
+    const { type: _type, ref: innerRef, ...linkProps } = useLinkProps(rest, ref)
 
     const children =
       typeof rest.children === 'function'

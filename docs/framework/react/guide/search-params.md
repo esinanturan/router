@@ -524,3 +524,114 @@ The `router.navigate` function works exactly the same way as the `useNavigate`/`
 ### `<Navigate search />`
 
 The `<Navigate search />` component works exactly the same way as the `useNavigate`/`navigate` hook/function above, but accepts its options as props instead of a function argument.
+
+## Transforming search with search middlewares
+
+When link hrefs are built, by default the only thing that matters for the query string part is the `search` property of a `<Link>`.
+
+TanStack Router provides a way to manipulate search params before the href is generated via **search middlewares**.
+Search middlewares are functions that transform the search parameters when generating new links for a route or its descendants.
+They are also executed upon navigation after search validation to allow manipulation of the query string.
+
+The following example shows how to make sure that for **every** link that is being built, the `rootValue` search param is added _if_ it is part of the current search params. If a link specifies `rootValue` inside `search`, then that value is used for building the link.
+
+```tsx
+import { z } from 'zod'
+import { createFileRoute } from '@tanstack/react-router'
+import { zodSearchValidator } from '@tanstack/router-zod-adapter'
+
+const searchSchema = z.object({
+  rootValue: z.string().optional(),
+})
+
+export const Route = createRootRoute({
+  validateSearch: zodSearchValidator(searchSchema),
+  search: {
+    middlewares: [
+      ({search, next}) => {
+        const result = next(search)
+        return {
+          rootValue: search.rootValue
+          ...result
+        }
+      }
+    ]
+  }
+})
+```
+
+Since this specific use case is quite common, TanStack Router provides a generic implementation to retain search params via `retainSearchParams`:
+
+```tsx
+import { z } from 'zod'
+import { createFileRoute, retainSearchParams } from '@tanstack/react-router'
+import { zodSearchValidator } from '@tanstack/router-zod-adapter'
+
+const searchSchema = z.object({
+  rootValue: z.string().optional(),
+})
+
+export const Route = createRootRoute({
+  validateSearch: zodSearchValidator(searchSchema),
+  search: {
+    middlewares: [retainSearchParams(['rootValue'])],
+  },
+})
+```
+
+Another common use case is to strip out search params from links if their default value is set. TanStack Router provides a generic implementation for this use case via `stripSearchParams`:
+
+```tsx
+import { z } from 'zod'
+import { createFileRoute, stripSearchParams } from '@tanstack/react-router'
+import { zodSearchValidator } from '@tanstack/router-zod-adapter'
+
+const defaultValues = {
+  one: 'abc',
+  two: 'xyz',
+}
+
+const searchSchema = z.object({
+  one: z.string().default(defaultValues.one),
+  two: z.string().default(defaultValues.two),
+})
+
+export const Route = createFileRoute('/hello')({
+  validateSearch: zodSearchValidator(searchSchema),
+  search: {
+    // strip default values
+    middlewares: [stripSearchParams(defaultValues)],
+  },
+})
+```
+
+Multiple middlewares can be chained. The following example shows how to combine both `retainSearchParams` and `stripSearchParams`.
+
+```tsx
+import {
+  Link,
+  createFileRoute,
+  retainSearchParams,
+  stripSearchParams,
+} from '@tanstack/react-router'
+import { z } from 'zod'
+import { zodSearchValidator } from '@tanstack/router-zod-adapter'
+
+const defaultValues = ['foo', 'bar']
+
+export const Route = createFileRoute('/search')({
+  validateSearch: zodSearchValidator(
+    z.object({
+      retainMe: z.string().optional(),
+      arrayWithDefaults: z.string().array().default(defaultValues),
+      required: z.string(),
+    }),
+  ),
+  search: {
+    middlewares: [
+      retainSearchParams(['retainMe']),
+      stripSearchParams({ arrayWithDefaults: defaultValues }),
+    ],
+  },
+})
+```
