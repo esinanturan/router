@@ -661,7 +661,7 @@ export type GetMatchFn = (matchId: string) => AnyRouteMatch | undefined
 export type UpdateMatchFn = (
   id: string,
   updater: (match: AnyRouteMatch) => AnyRouteMatch,
-) => AnyRouteMatch
+) => void
 
 export type LoadRouteChunkFn = (route: AnyRoute) => Promise<Array<void>>
 
@@ -2052,37 +2052,29 @@ export class RouterCore<
   }
 
   updateMatch: UpdateMatchFn = (id, updater) => {
-    let updated!: AnyRouteMatch
-    const isPending = this.state.pendingMatches?.find((d) => d.id === id)
-    const isMatched = this.state.matches.find((d) => d.id === id)
-    const isCached = this.state.cachedMatches.find((d) => d.id === id)
-
-    const matchesKey = isPending
+    const matchesKey = this.state.pendingMatches?.some((d) => d.id === id)
       ? 'pendingMatches'
-      : isMatched
+      : this.state.matches.some((d) => d.id === id)
         ? 'matches'
-        : isCached
+        : this.state.cachedMatches.some((d) => d.id === id)
           ? 'cachedMatches'
           : ''
 
     if (matchesKey) {
       this.__store.setState((s) => ({
         ...s,
-        [matchesKey]: s[matchesKey]?.map((d) =>
-          d.id === id ? (updated = updater(d)) : d,
-        ),
+        [matchesKey]: s[matchesKey]?.map((d) => (d.id === id ? updater(d) : d)),
       }))
     }
-
-    return updated
   }
 
   getMatch: GetMatchFn = (matchId: string) => {
-    return [
-      ...this.state.cachedMatches,
-      ...(this.state.pendingMatches ?? []),
-      ...this.state.matches,
-    ].find((d) => d.id === matchId)
+    const findFn = (d: { id: string }) => d.id === matchId
+    return (
+      this.state.cachedMatches.find(findFn) ??
+      this.state.pendingMatches?.find(findFn) ??
+      this.state.matches.find(findFn)
+    )
   }
 
   loadMatches = async ({
@@ -2867,7 +2859,11 @@ export class RouterCore<
           : (route.options.gcTime ?? this.options.defaultGcTime)) ??
         5 * 60 * 1000
 
-      return !(d.status !== 'error' && Date.now() - d.updatedAt < gcTime)
+      const isError = d.status === 'error'
+      if (isError) return true
+
+      const isStale = Date.now() - d.updatedAt >= gcTime
+      return isStale
     }
     this.clearCache({ filter })
   }
