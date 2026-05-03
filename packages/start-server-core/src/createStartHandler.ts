@@ -1061,6 +1061,7 @@ async function handleServerRoutes({
 
   // Add handler middleware if exact match
   const server = foundRoute?.options.server
+  let isHeadFallback = false
   if (server?.handlers && isExactMatch) {
     const handlers =
       typeof server.handlers === 'function'
@@ -1068,7 +1069,14 @@ async function handleServerRoutes({
         : server.handlers
 
     const requestMethod = request.method.toUpperCase() as RouteMethod
-    const handler = handlers[requestMethod] ?? handlers['ANY']
+    // Per RFC 9110 §9.3.2, HEAD must return the same header fields as GET.
+    // Priority for HEAD: explicit HEAD handler → GET → ANY (last resort).
+    const handler =
+      requestMethod === 'HEAD'
+        ? (handlers['HEAD'] ?? handlers['GET'] ?? handlers['ANY'])
+        : (handlers[requestMethod] ?? handlers['ANY'])
+    isHeadFallback =
+      requestMethod === 'HEAD' && handler !== undefined && !handlers['HEAD']
 
     if (handler) {
       const mayDefer = !!foundRoute.options.component
@@ -1100,6 +1108,21 @@ async function handleServerRoutes({
     params: routeParams,
     pathname,
   })
+
+  // RFC 9110 §9.3.2: HEAD must carry the same header fields as GET but no body.
+  // Resolve any redirect before stripping so the Location header survives.
+  if (isHeadFallback) {
+    if (!ctx.response) {
+      throwRouteHandlerError()
+    }
+
+    const resolved = await handleRedirectResponse(
+      ctx.response,
+      request,
+      getRouter,
+    )
+    return new Response(null, resolved)
+  }
 
   return ctx.response
 }
