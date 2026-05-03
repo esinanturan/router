@@ -1,5 +1,11 @@
 # @tanstack/start-server-core
 
+## 1.167.29
+
+### Patch Changes
+
+- fix(start-server-core): fall back HEAD requests to GET then ANY per RFC 9110 §9.3.2 ([#7325](https://github.com/TanStack/router/pull/7325))
+
 ## 1.167.28
 
 ### Patch Changes
